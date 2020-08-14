@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<!-- USE DEVELOPMENT VERSION -->
+	<script src="https://unpkg.com/konva@7.0.3/konva.min.js"></script>
+	<meta charset="utf-8" />
+	<title>Konva Transform Events Demo</title>
+	<style>
+		body {
+			margin: 0;
+			padding: 0;
+			overflow: hidden;
+			background-color: #f0f0f0;
+		}
+	</style>
+</head>
+
+<body>
+	<div id="container"></div>
+	<script>
+		var width = window.innerWidth; // 웹페이지 너비
+		var height = 1080; // 웹페이지 높이
+
+		var MAX_WIDTH = 380; // 직사각형 객체의 최대 너비
+		var MIN_WIDTH = 40;
+		var MAX_HEIGHT = 20; // 직사각형 객체의 최대 높이
+
+		var index_i;
+		var index_j;
+		var neighbor_i;
+		var neighbor_j;
+		var lines;
+		// 캔버스
+		var stage = new Konva.Stage({
+			container: 'container',
+			width: width,
+			height: height
+		});
+
+		// 레이어
+		var layer = new Konva.Layer();
+		stage.add(layer);
+
+		// 교차로 신호 리스트
+		var interList = [];
+		var initX = 100;
+		var initY = 700;
+
+		// 3개 교차로 신호등 만들기
+		for (var i = 0; i < 3; i++) {
+			var rectList = [];
+			initX = 100;
+			for (var j = 0; j < 4; j++) {
+				var rect = new Konva.Rect({
+					x: initX,
+					y: initY,
+					width: 200,
+					height: 20,
+					scaleX: 1,
+					name: 'rect' + '_' + i + '_' + j,
+					draggable: false,
+				});
+				if (j % 2 == 0) { rect.setAttr('fill', 'red'); }
+				else { rect.setAttr('fill', 'green') }
+
+				rectList.push(rect);
+				initX = initX + 200;				
+			}
+			initY = initY - 300;
+			interList.push(rectList);
+		}
+		//console.log(interList);
+
+		// 트랜스폼 객체 생성
+		var tr = new Konva.Transformer({
+			boundBoxFunc:
+				function (oldBoundBox, newBoundBox) {
+					if (Math.abs(newBoundBox.width) > MAX_WIDTH || Math.abs(newBoundBox.width) < MIN_WIDTH) {
+						return oldBoundBox;
+					}
+					if (Math.abs(newBoundBox.height) > MAX_HEIGHT) {
+						return oldBoundBox;
+					}
+					return newBoundBox;
+				},
+		});
+
+		// 교차로 신호 그리기
+		for (var i = 0; i < interList.length; i++) {
+			for (var j = 0; j < interList[i].length; j++) {
+				// 개별 신호 레이어에 추가
+				layer.add(interList[i][j]);
+
+				interList[i][j].on('click', function (e) {
+					console.log(e.target._id);
+					index_i = parseInt((e.target._id - 3) / 4);
+					index_j = (e.target._id - 3) % 4;
+
+					tr.nodes([interList[index_i][index_j]]);
+					layer.draw();
+					updateText();
+				}); 
+
+				interList[i][j].on('transform', function (e) {
+					var newX = e.target.attrs.x	+ (e.target.attrs.width * e.target.attrs.scaleX);
+
+					if (e.evt.layerX <= (e.target.attrs.x + 10)) { // 왼쪽으로 조정할 때					
+						if (index_j > 0) {
+							interList[index_i][index_j - 1].width(e.target.attrs.x - interList[index_i][index_j - 1].attrs.x);
+							neighbor_i = index_i;
+							neighbor_j = index_j - 1;
+						} else { } //늘리기 불가
+					}
+					else { // 오른쪽으로 조정할 때 
+						if (index_j < 2) {
+							interList[index_i][index_j + 1].x(newX);
+							interList[index_i][index_j + 1].width(interList[index_i][index_j + 2].attrs.x - newX);
+							//console.log(interList[index_i][index_j+1].attrs.width);
+							neighbor_i = index_i;
+							neighbor_j = index_j + 1;
+						}
+						else {
+							interList[index_i][index_j + 1].x(newX);
+							interList[index_i][index_j + 1].width(900 - newX);
+							neighbor_i = index_i;
+							neighbor_j = index_j + 1;
+						}
+					}
+					updateText();
+				});
+
+				interList[i][j].on('transformend', function (e) {
+					var newMyWidth = e.target.attrs.width * e.target.attrs.scaleX;
+					e.target.width(newMyWidth);
+					e.target.scaleX(1);
+					interList[neighbor_i][neighbor_j].scaleX(1);
+
+					//console.log(e.target.attrs.width);
+					//console.log(interList[neighbor_i][neighbor_j].attrs.width);
+					SetVehicleTrajectory();
+
+				});
+				//text.text(lines.join('\n'));
+				//layer.batchDraw();
+			}
+		}
+		layer.add(tr);
+		layer.draw();
+		//function updateText() {};
+		// 트랜스폼 객체 클리어
+		stage.on('click', function (e) {
+			if (e.target._id == 1) {
+				tr.nodes([]);
+				layer.draw();
+			}
+		});
+		var textinX = 100;
+		var textinY = 730;
+		var text2List = [];
+
+		// Text 배열 만들기
+		for (var i = 0; i < 3; i++) {
+			var textList = [];
+			textinX = 100;
+			for (var j = 0; j < 4; j++) {
+				var text = new Konva.Text({
+					x: textinX,
+					y: textinY,
+				})
+				textList.push(text);
+				textinX = textinX + 200;
+
+			}
+			textinY = textinY - 300;
+			text2List.push(textList);
+		};
+		updateText()
+		var lines = [];
+
+		// Text 배열 보여주기
+		function updateText() {
+			for (var i = 0; i < text2List.length; i++) {
+				for (var j = 0; j < text2List[i].length; j++) {
+					layer.add(text2List[i][j]);
+					//console.log(interList[i][j]);
+					var lines = [
+						'width: ' + parseInt(interList[i][j].attrs.width * interList[i][j].attrs.scaleX),
+					];
+					text2List[i][j].text(lines.join('\n'));
+					layer.batchDraw();
+
+				}
+			}
+		};
+		// 축 그리기
+		var arrow = new Konva.Arrow({
+			points: [80, 800, 900, 800],
+			pointerLength: 20,
+			pointerWidth: 20,
+			fill: 'black',
+			stroke: 'black',
+			strokeWidth: 4,
+			lineCap: 'round',
+			lineJoin: 'round',
+		});
+		layer.add(arrow);
+		var arrow2 = new Konva.Arrow({
+			points: [80, 800, 80, 50],
+			pointerLength: 20,
+			pointerWidth: 20,
+			fill: 'black',
+			stroke: 'black',
+			strokeWidth: 4,
+			lineCap: 'round',
+			lineJoin: 'round',
+		});
+		layer.add(arrow2);
+		// 축 명칭 그리기
+		var YText = new Konva.Text({
+			x: 50,
+			y: 18,
+			text: '거리',
+			fontSize: 30,
+			fontFamily: 'Calibri',
+			fill: 'black',
+		});
+		layer.add(YText);
+
+		var XText = new Konva.Text({
+			x: 910,
+			y: 790,
+			text: '시간',
+			fontSize: 30,
+			fontFamily: 'Calibri',
+			fill: 'black',
+		});
+		layer.add(XText);
+
+		// 차량 만들기
+		// 차량 배열
+		var vehicleList = [];
+		for (var i = 0; i < 10; i++) {
+			var vehicle = {
+				speed: 1,
+				direction: undefined,
+				genTime: getRandomInt(100, 400),
+				trajectories: new Konva.Arrow({
+					stroke: 'blue',
+					strokeWidth: 1.5,
+					lineCap: 'round',
+					lineJoin: 'round',
+				})
+			}
+			JSON.stringify(vehicle);
+
+			if (i % 2 == 0) { vehicle.direction = true, vehicle.trajectories = new Konva.Arrow({ stroke: 'purple' }) }
+			else { vehicle.direction = false }
+
+			layer.add(vehicle.trajectories);
+			vehicleList.push(vehicle);
+		}
+
+		SetVehicleTrajectory();
+
+		// 난수 생성
+		function getRandomInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+
+		// 차량 경로 업데이트
+		function SetVehicleTrajectory() {
+			for (var i = 0; i < vehicleList.length; i++) {
+				var curX = 0;
+				var curY = 0;
+
+				var pointArray = [];
+				curX = vehicleList[i].genTime;
+
+				if (vehicleList[i].direction == true) { curY = 0; }
+				else { curY = 750; }
+
+				// 시작 노드
+				pointArray.push(curX);
+				pointArray.push(800 - curY);
+
+				while (curX < 900) {
+					// 중간 노드
+					var nextPosition = CalNextPosition(curX, curY, vehicleList[i].direction);
+					curX = nextPosition[0];
+					curY = nextPosition[1];
+					pointArray.push(curX);
+					pointArray.push(800 - curY);
+				}
+				vehicleList[i].trajectories.points(pointArray);
+				layer.batchDraw();
+			}
+		}
+
+		function CalNextPosition(x, y, direction) {
+			var result = [];
+			var deltaX;
+			var deltaY;
+
+			var distanceToInter = []
+			var tmpDistance = 10000;
+			var target = 0;
+
+
+			for (var i = 0; i < interList.length; i++) {
+				if(direction==true){
+					var curDistance = Math.abs((800 - y) - Math.round(interList[i][0].attrs.y) -20);
+				}
+				else{
+					var curDistance = Math.abs((800 - y) - Math.round(interList[i][0].attrs.y) );
+				}
+				distanceToInter.push(curDistance);
+				if (tmpDistance > curDistance) {
+					tmpDistance = curDistance;
+					target = i;
+				}
+			}
+
+			if (tmpDistance == 0) // 신호에 걸려있을 경우
+			{
+				for (var i = 0; i < interList[target].length; i++) {
+					var start = interList[target][i].attrs.x;
+					var end = start + interList[target][i].attrs.width;
+
+					if (x >= start && x < end) {
+						if (interList[target][i].attrs.fill == 'green') {
+							var driveLength = 0;
+							var sign;
+
+							if (direction == true) { sign = 1; }
+							else { sign = -1; }
+
+							if (target + sign == interList.length
+								|| target + sign == -1) {
+								driveLength = 900 - x;
+							}
+							else {
+								driveLength = distanceToInter[target + sign];
+								if (x + driveLength > 900) { driveLength = 900 - x; }
+							}
+
+							deltaX = x + driveLength;
+							deltaY = y + (driveLength * sign);
+						}
+						else {
+							var stopLength = end - x;
+							deltaX = x + stopLength;
+							deltaY = y;
+						}
+					}
+				}
+			}
+			else {
+				deltaX = x + tmpDistance; // 기울기는 1로 가정, 스피드를 입력변수로 받아 기울기 조절 가능
+				deltaY;
+				if (direction == true) { deltaY = y + tmpDistance; }
+				else { deltaY = y - tmpDistance; }
+			}
+
+			result.push(deltaX);
+			result.push(deltaY);
+			return result;
+		}
+
+	</script>
+</body>
+
+</html>
